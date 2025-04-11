@@ -12,6 +12,7 @@
 import { EventEmitter } from 'events'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { ListResourcesResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
@@ -60,7 +61,8 @@ async function runClient(serverUrl: string, callbackPort: number, headers: Recor
   // Create the transport factory
   const url = new URL(serverUrl)
   function initTransport() {
-    const transport = new SSEClientTransport(url, { authProvider, requestInit: { headers } })
+    // const transport = new SSEClientTransport(url, { authProvider, requestInit: { headers } })
+    const transport = new StreamableHTTPClientTransport(url, { authProvider, requestInit: { headers } })
 
     // Set up message and error handlers
     transport.onmessage = (message) => {

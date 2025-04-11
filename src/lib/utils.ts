@@ -1,5 +1,6 @@
 import { OAuthClientProvider, UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { OAuthCallbackServerOptions } from './types'
 import express from 'express'
@@ -96,10 +97,10 @@ export async function connectToRemoteServer(
     },
   }
 
-  const transport = new SSEClientTransport(url, {
+  const transport = new StreamableHTTPClientTransport(url, {
     authProvider,
     requestInit: { headers },
-    eventSourceInit,
+    // eventSourceInit,
   })
 
   try {

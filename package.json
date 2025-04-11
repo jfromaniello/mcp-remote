@@ -28,11 +28,11 @@
     "check": "prettier --check . && tsc"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.7.0",
     "express": "^4.21.2",
     "open": "^10.1.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "link:/Users/glen/src/hax/mcp/typescript-sdk",
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.12",
