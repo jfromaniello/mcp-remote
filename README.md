@@ -131,7 +131,7 @@ npx mcp-remote https://example.remote/server --transport sse-only
 - `http-only`: Only uses HTTP transport, fails if the server doesn't support it
 - `sse-only`: Only uses SSE transport, fails if the server doesn't support it
 
-#### Static OAuth Client Metadata
+### Static OAuth Client Metadata
 
 MCP Remote supports providing static OAuth client metadata instead of using the mcp-remote defaults.
 This is useful when connecting to OAuth servers that expect specific client/software IDs or scopes.
@@ -144,10 +144,13 @@ npx mcp-remote https://example.remote/server --static-oauth-client-metadata '{ "
 
 ### Static OAuth Client Information
 
-MCP Remote supports providing static OAuth client information instead of using dynamic client registration.
+Per the [spec](https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization#2-4-dynamic-client-registration),
+servers are encouraged but not required to support [OAuth dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591).
+
+For these servers, MCP Remote supports providing static OAuth client information instead.
 This is useful when connecting to OAuth servers that require pre-registered clients.
 
-Provide the client information with the `--static-oauth-client-info` flag:
+Provide the client information as JSON with the `--static-oauth-client-info` flag:
 
 ```bash
 export MCP_REMOTE_CLIENT_ID=xxx
