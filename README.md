@@ -104,6 +104,17 @@ To bypass authentication, or to emit custom headers on all requests to your remo
       ]
 ```
 
+* To change which host `mcp-remote` registers as the OAuth callback URL (by default `localhost`), add the `--host` flag.
+
+```json
+      "args": [
+        "mcp-remote",
+        "https://remote.mcp.server/sse",
+        "--host",
+        "127.0.0.1"
+      ]
+```
+
 * To allow HTTP connections in trusted private networks, add the `--allow-http` flag. Note: This should only be used in secure private networks where traffic cannot be intercepted.
 
 ```json
@@ -111,6 +122,16 @@ To bypass authentication, or to emit custom headers on all requests to your remo
         "mcp-remote",
         "http://internal-service.vpc/sse",
         "--allow-http"
+      ]
+```
+
+* To enable detailed debugging logs, add the `--debug` flag. This will write verbose logs to `~/.mcp-auth/{server_hash}_debug.log` with timestamps and detailed information about the auth process, connections, and token refreshing.
+
+```json
+      "args": [
+        "mcp-remote",
+        "https://remote.mcp.server/sse",
+        "--debug"
       ]
 ```
 
@@ -254,6 +275,22 @@ this might look like:
 * Powershell: <br/>`Get-Content "C:\Users\YourUsername\AppData\Local\Claude\Logs\mcp.log" -Wait -Tail 20`
 
 ## Debugging
+
+### Debug Logs
+
+For troubleshooting complex issues, especially with token refreshing or authentication problems, use the `--debug` flag:
+
+```json
+"args": [
+  "mcp-remote",
+  "https://remote.mcp.server/sse",
+  "--debug"
+]
+```
+
+This creates detailed logs in `~/.mcp-auth/{server_hash}_debug.log` with timestamps and complete information about every step of the connection and authentication process. When you find issues with token refreshing, laptop sleep/resume issues, or auth problems, provide these logs when seeking support.
+
+### Authentication Errors
 
 If you encounter the following error, returned by the `/callback` URL:
 
