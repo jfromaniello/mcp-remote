@@ -9,14 +9,13 @@ import {
 import type { OAuthProviderOptions, StaticOAuthClientMetadata } from './types'
 import { readJsonFile, writeJsonFile, readTextFile, writeTextFile } from './mcp-auth-config'
 import { StaticOAuthClientInformationFull } from './types'
-import { getServerUrlHash, log, debugLog, DEBUG, MCP_REMOTE_VERSION } from './utils'
+import { log, debugLog, DEBUG, MCP_REMOTE_VERSION } from './utils'
 
 /**
  * Implements the OAuthClientProvider interface for Node.js environments.
  * Handles OAuth flow and token storage for MCP clients.
  */
 export class NodeOAuthClientProvider implements OAuthClientProvider {
-  private serverUrlHash: string
   private callbackPath: string
   private clientName: string
   private clientUri: string
@@ -30,7 +29,6 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @param options Configuration options for the provider
    */
   constructor(readonly options: OAuthProviderOptions) {
-    this.serverUrlHash = getServerUrlHash(options.serverUrl)
     this.callbackPath = options.callbackPath || '/oauth/callback'
     this.clientName = options.clientName || 'MCP CLI Client'
     this.clientUri = options.clientUri || 'https://github.com/modelcontextprotocol/mcp-cli'
@@ -63,13 +61,14 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @returns The client information or undefined
    */
   async clientInformation(): Promise<OAuthClientInformationFull | undefined> {
-    if (DEBUG) await debugLog(this.serverUrlHash, 'Reading client info')
+    if (DEBUG) await debugLog('Reading client info')
     if (this.staticOAuthClientInfo) {
-      if (DEBUG) await debugLog(this.serverUrlHash, 'Returning static client info')
+      if (DEBUG) await debugLog('Returning static client info')
       return this.staticOAuthClientInfo
     }
-    const clientInfo = await readJsonFile<OAuthClientInformationFull>(this.serverUrlHash, 'client_info.json', OAuthClientInformationFullSchema)
-    if (DEBUG) await debugLog(this.serverUrlHash, 'Client info result:', clientInfo ? 'Found' : 'Not found')
+    const serverUrlHash = global.currentServerUrlHash!
+    const clientInfo = await readJsonFile<OAuthClientInformationFull>(serverUrlHash, 'client_info.json', OAuthClientInformationFullSchema)
+    if (DEBUG) await debugLog('Client info result:', clientInfo ? 'Found' : 'Not found')
     return clientInfo
   }
 
@@ -78,8 +77,9 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @param clientInformation The client information to save
    */
   async saveClientInformation(clientInformation: OAuthClientInformationFull): Promise<void> {
-    if (DEBUG) await debugLog(this.serverUrlHash, 'Saving client info', { client_id: clientInformation.client_id })
-    await writeJsonFile(this.serverUrlHash, 'client_info.json', clientInformation)
+    if (DEBUG) await debugLog('Saving client info', { client_id: clientInformation.client_id })
+    const serverUrlHash = global.currentServerUrlHash!
+    await writeJsonFile(serverUrlHash, 'client_info.json', clientInformation)
   }
 
   /**
@@ -88,38 +88,39 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    */
   async tokens(): Promise<OAuthTokens | undefined> {
     if (DEBUG) {
-      await debugLog(this.serverUrlHash, 'Reading OAuth tokens')
-      await debugLog(this.serverUrlHash, 'Token request stack trace:', new Error().stack)
+      await debugLog('Reading OAuth tokens')
+      await debugLog('Token request stack trace:', new Error().stack)
     }
 
-    const tokens = await readJsonFile<OAuthTokens>(this.serverUrlHash, 'tokens.json', OAuthTokensSchema)
+    const serverUrlHash = global.currentServerUrlHash!
+    const tokens = await readJsonFile<OAuthTokens>(serverUrlHash, 'tokens.json', OAuthTokensSchema)
 
     if (DEBUG) {
       if (tokens) {
-        const expiresAt = new Date(tokens.expires_at)
+        const expiresAt = new Date((tokens as any).expires_at)
         const now = new Date()
         const expiresAtTime = expiresAt.getTime()
         const timeLeft = !isNaN(expiresAtTime) ? Math.round((expiresAtTime - now.getTime()) / 1000) : 0
 
         // Alert if expires_at produces an invalid date
         if (isNaN(expiresAtTime)) {
-          await debugLog(this.serverUrlHash, '⚠️ WARNING: Invalid expires_at detected while reading tokens ⚠️', {
-            expiresAt: tokens.expires_at,
+          await debugLog('⚠️ WARNING: Invalid expires_at detected while reading tokens ⚠️', {
+            expiresAt: (tokens as any).expires_at,
             tokenObject: JSON.stringify(tokens),
             stack: new Error('Invalid expires_at timestamp').stack
           })
         }
 
-        await debugLog(this.serverUrlHash, 'Token result:', {
+        await debugLog('Token result:', {
           found: true,
           hasAccessToken: !!tokens.access_token,
           hasRefreshToken: !!tokens.refresh_token,
           expiresIn: `${timeLeft} seconds`,
           isExpired: timeLeft <= 0,
-          expiresAt: tokens.expires_at
+          expiresAt: (tokens as any).expires_at
         })
       } else {
-        await debugLog(this.serverUrlHash, 'Token result: Not found')
+        await debugLog('Token result: Not found')
       }
     }
 
@@ -132,29 +133,30 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    */
   async saveTokens(tokens: OAuthTokens): Promise<void> {
     if (DEBUG) {
-      const expiresAt = new Date(tokens.expires_at)
+      const expiresAt = new Date((tokens as any).expires_at)
       const now = new Date()
       const expiresAtTime = expiresAt.getTime()
       const timeLeft = !isNaN(expiresAtTime) ? Math.round((expiresAtTime - now.getTime()) / 1000) : 0
 
       // Alert if expires_at produces an invalid date
       if (isNaN(expiresAtTime)) {
-        await debugLog(this.serverUrlHash, '⚠️ WARNING: Invalid expires_at detected in tokens ⚠️', {
-          expiresAt: tokens.expires_at,
+        await debugLog('⚠️ WARNING: Invalid expires_at detected in tokens ⚠️', {
+          expiresAt: (tokens as any).expires_at,
           tokenObject: JSON.stringify(tokens),
           stack: new Error('Invalid expires_at timestamp').stack
         })
       }
 
-      await debugLog(this.serverUrlHash, 'Saving tokens', {
+      await debugLog('Saving tokens', {
         hasAccessToken: !!tokens.access_token,
         hasRefreshToken: !!tokens.refresh_token,
         expiresIn: `${timeLeft} seconds`,
-        expiresAt: tokens.expires_at
+        expiresAt: (tokens as any).expires_at
       })
     }
 
-    await writeJsonFile(this.serverUrlHash, 'tokens.json', tokens)
+    const serverUrlHash = global.currentServerUrlHash!
+    await writeJsonFile(serverUrlHash, 'tokens.json', tokens)
   }
 
   /**
@@ -164,15 +166,15 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
     log(`\nPlease authorize this client by visiting:\n${authorizationUrl.toString()}\n`)
 
-    if (DEBUG) await debugLog(this.serverUrlHash, 'Redirecting to authorization URL', authorizationUrl.toString())
+    if (DEBUG) await debugLog('Redirecting to authorization URL', authorizationUrl.toString())
 
     try {
       await open(authorizationUrl.toString())
       log('Browser opened automatically.')
-      if (DEBUG) await debugLog(this.serverUrlHash, 'Browser opened automatically')
+      if (DEBUG) await debugLog('Browser opened automatically')
     } catch (error) {
       log('Could not open browser automatically. Please copy and paste the URL above into your browser.')
-      if (DEBUG) await debugLog(this.serverUrlHash, 'Failed to open browser', error)
+      if (DEBUG) await debugLog('Failed to open browser', error)
     }
   }
 
@@ -181,8 +183,9 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @param codeVerifier The code verifier to save
    */
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
-    if (DEBUG) await debugLog(this.serverUrlHash, 'Saving code verifier')
-    await writeTextFile(this.serverUrlHash, 'code_verifier.txt', codeVerifier)
+    if (DEBUG) await debugLog('Saving code verifier')
+    const serverUrlHash = global.currentServerUrlHash!
+    await writeTextFile(serverUrlHash, 'code_verifier.txt', codeVerifier)
   }
 
   /**
@@ -190,9 +193,10 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @returns The code verifier
    */
   async codeVerifier(): Promise<string> {
-    if (DEBUG) await debugLog(this.serverUrlHash, 'Reading code verifier')
-    const verifier = await readTextFile(this.serverUrlHash, 'code_verifier.txt', 'No code verifier saved for session')
-    if (DEBUG) await debugLog(this.serverUrlHash, 'Code verifier found:', !!verifier)
+    if (DEBUG) await debugLog('Reading code verifier')
+    const serverUrlHash = global.currentServerUrlHash!
+    const verifier = await readTextFile(serverUrlHash, 'code_verifier.txt', 'No code verifier saved for session')
+    if (DEBUG) await debugLog('Code verifier found:', !!verifier)
     return verifier
   }
 }

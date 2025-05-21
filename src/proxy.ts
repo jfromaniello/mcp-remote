@@ -44,7 +44,7 @@ async function runProxy(
   const serverUrlHash = getServerUrlHash(serverUrl)
 
   // Create a lazy auth coordinator
-  const authCoordinator = createLazyAuthCoordinator(serverUrlHash, callbackPort, events)
+  const authCoordinator = createLazyAuthCoordinator(callbackPort, events)
 
   // Create the OAuth client provider
   const authProvider = new NodeOAuthClientProvider({
