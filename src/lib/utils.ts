@@ -32,6 +32,97 @@ const pid = process.pid
 // Global debug flag
 export let DEBUG = false
 
+// Global flag to track if fetch patching is enabled
+let fetchPatchingEnabled = false
+
+// Store original fetch for restoration
+let originalFetch: typeof fetch
+
+// Secret detection patterns
+const SECRET_PATTERNS = [
+  // Bearer tokens
+  /Bearer\s+[A-Za-z0-9\-_=.+/]{20,}/gi,
+  // Basic auth
+  /Basic\s+[A-Za-z0-9+/=]{10,}/gi,
+  // JWT tokens (eyJ... pattern)
+  /eyJ[A-Za-z0-9\-_=.+/]{20,}/gi,
+  // API keys with common prefixes
+  /(?:sk|pk|api)[-_]?[A-Za-z0-9]{20,}/gi,
+  // Long hex strings (session tokens, etc.)
+  /\b[a-fA-F0-9]{32,}\b/g,
+  // Long alphanumeric strings that look like tokens
+  /\b[A-Za-z0-9\-_=.+/]{40,}\b/g,
+]
+
+// Common secret field names
+const SECRET_FIELD_NAMES = [
+  'access_token',
+  'refresh_token',
+  'authorization',
+  'auth',
+  'token',
+  'secret',
+  'key',
+  'password',
+  'passwd',
+  'credential',
+  'api_key',
+  'apikey',
+  'client_secret',
+  'private_key',
+]
+
+// Redact secrets from text
+function redactSecrets(text: string): string {
+  if (!text) return text
+
+  let redacted = text
+
+  // Apply pattern-based redaction
+  for (const pattern of SECRET_PATTERNS) {
+    redacted = redacted.replace(pattern, (match) => {
+      // Keep first few characters for debugging context
+      const keepChars = Math.min(4, Math.floor(match.length * 0.2))
+      return match.substring(0, keepChars) + '***REDACTED***'
+    })
+  }
+
+  return redacted
+}
+
+// Redact secrets from object (headers, JSON, etc.)
+function redactSecretsFromObject(obj: any): any {
+  if (!obj || typeof obj !== 'object') {
+    return typeof obj === 'string' ? redactSecrets(obj) : obj
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(redactSecretsFromObject)
+  }
+
+  const redacted: any = {}
+  for (const [key, value] of Object.entries(obj)) {
+    const lowerKey = key.toLowerCase()
+
+    // Check if key name suggests it contains a secret
+    const isSecretField = SECRET_FIELD_NAMES.some((secretField) => lowerKey.includes(secretField))
+
+    if (isSecretField && typeof value === 'string' && value.length > 8) {
+      // Redact the value but keep some prefix for context
+      const keepChars = Math.min(4, Math.floor(value.length * 0.2))
+      redacted[key] = value.substring(0, keepChars) + '***REDACTED***'
+    } else if (typeof value === 'string') {
+      redacted[key] = redactSecrets(value)
+    } else if (typeof value === 'object') {
+      redacted[key] = redactSecretsFromObject(value)
+    } else {
+      redacted[key] = value
+    }
+  }
+
+  return redacted
+}
+
 // Helper function for timestamp formatting
 function getTimestamp(): string {
   const now = new Date()
@@ -52,22 +143,135 @@ export async function debugLog(message: string, ...args: any[]): Promise<void> {
     // Format with timestamp and PID
     const formattedMessage = `[${getTimestamp()}][${pid}] ${message}`
 
-    // Log to console
-    console.error(formattedMessage, ...args)
+    // Log to console (with redaction)
+    const redactedArgsForConsole = args.map((arg) => {
+      if (typeof arg === 'object') {
+        return redactSecretsFromObject(arg)
+      } else {
+        return redactSecrets(String(arg))
+      }
+    })
+    console.error(redactSecrets(formattedMessage), ...redactedArgsForConsole)
 
-    // Ensure config directory exists
+    // Ensure config directory exists (with version number like tokens)
     const configDir = process.env.MCP_REMOTE_CONFIG_DIR || path.join(os.homedir(), '.mcp-auth')
-    await fs.mkdir(configDir, { recursive: true })
+    const versionedConfigDir = path.join(configDir, `mcp-remote-${MCP_REMOTE_VERSION}`)
+    await fs.mkdir(versionedConfigDir, { recursive: true })
 
     // Append to log file
-    const logPath = path.join(configDir, `${serverUrlHash}_debug.log`)
-    const logMessage = `${formattedMessage} ${args.map((arg) => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))).join(' ')}\n`
+    const logPath = path.join(versionedConfigDir, `${serverUrlHash}_debug.log`)
+    const redactedArgs = args.map((arg) => {
+      if (typeof arg === 'object') {
+        return JSON.stringify(redactSecretsFromObject(arg))
+      } else {
+        return redactSecrets(String(arg))
+      }
+    })
+    const logMessage = `${redactSecrets(formattedMessage)} ${redactedArgs.join(' ')}\n`
 
     await fs.appendFile(logPath, logMessage, { encoding: 'utf8' })
   } catch (error) {
     // Fallback to console if file logging fails
     console.error(`[DEBUG LOG ERROR] ${error}`)
   }
+}
+
+// Patch global fetch to log request/response in debug mode
+function patchGlobalFetch(): void {
+  if (fetchPatchingEnabled || typeof globalThis.fetch !== 'function') return
+
+  originalFetch = globalThis.fetch
+  fetchPatchingEnabled = true
+
+  globalThis.fetch = async function patchedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const url = input instanceof URL ? input.toString() : typeof input === 'string' ? input : input.url
+    const method = init?.method || 'GET'
+
+    // Log request
+    if (DEBUG) {
+      const requestHeaders: Record<string, string> = {}
+      if (init?.headers) {
+        if (init.headers instanceof Headers) {
+          init.headers.forEach((value, key) => {
+            requestHeaders[key] = value
+          })
+        } else if (Array.isArray(init.headers)) {
+          init.headers.forEach(([key, value]) => {
+            requestHeaders[key] = value
+          })
+        } else {
+          Object.assign(requestHeaders, init.headers)
+        }
+      }
+
+      let requestBody = ''
+      if (init?.body) {
+        if (typeof init.body === 'string') {
+          requestBody = init.body.slice(0, 1024) // First 1KB
+        } else if (init.body instanceof ArrayBuffer) {
+          requestBody = `[ArrayBuffer ${init.body.byteLength} bytes]`
+        } else {
+          requestBody = '[Non-string body]'
+        }
+      }
+
+      await debugLog('HTTP Request', {
+        method,
+        url,
+        headers: requestHeaders,
+        body: requestBody || undefined,
+      })
+    }
+
+    try {
+      const response = await originalFetch(input, init)
+
+      // Log response
+      if (DEBUG) {
+        const responseHeaders: Record<string, string> = {}
+        response.headers.forEach((value, key) => {
+          responseHeaders[key] = value
+        })
+
+        // Clone response to read body without consuming it
+        const responseClone = response.clone()
+        let responseBody = ''
+        try {
+          const text = await responseClone.text()
+          responseBody = text.slice(0, 1024) // First 1KB
+        } catch {
+          responseBody = '[Unable to read response body]'
+        }
+
+        await debugLog('HTTP Response', {
+          status: response.status,
+          statusText: response.statusText,
+          url,
+          headers: responseHeaders,
+          body: responseBody || undefined,
+        })
+      }
+
+      return response
+    } catch (error) {
+      if (DEBUG) {
+        await debugLog('HTTP Request Error', {
+          method,
+          url,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+      throw error
+    }
+  }
+}
+
+// Restore original fetch
+function restoreGlobalFetch(): void {
+  if (!fetchPatchingEnabled || !originalFetch) return
+
+  globalThis.fetch = originalFetch
+  fetchPatchingEnabled = false
 }
 
 export function log(str: string, ...rest: unknown[]) {
@@ -555,6 +759,7 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
   const debug = args.includes('--debug')
   if (debug) {
     DEBUG = true
+    patchGlobalFetch()
     log('Debug mode enabled - detailed logs will be written to ~/.mcp-auth/')
   }
 
@@ -681,19 +886,18 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
  * @param cleanup Cleanup function to run on shutdown
  */
 export function setupSignalHandlers(cleanup: () => Promise<void>) {
-  process.on('SIGINT', async () => {
+  const shutdownHandler = async () => {
     log('\nShutting down...')
+    restoreGlobalFetch()
     await cleanup()
     process.exit(0)
-  })
+  }
+
+  process.on('SIGINT', shutdownHandler)
 
   // Keep the process alive
   process.stdin.resume()
-  process.stdin.on('end', async () => {
-    log('\nShutting down...')
-    await cleanup()
-    process.exit(0)
-  })
+  process.stdin.on('end', shutdownHandler)
 }
 
 /**
