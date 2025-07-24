@@ -27,7 +27,9 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   private staticOAuthClientMetadata: StaticOAuthClientMetadata
   private staticOAuthClientInfo: StaticOAuthClientInformationFull
   private authorizeResource: string | undefined
+  private authorizeScopes: string | undefined
   private _state: string
+  private useAudience: boolean
 
   /**
    * Creates a new NodeOAuthClientProvider
@@ -43,6 +45,8 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     this.staticOAuthClientMetadata = options.staticOAuthClientMetadata
     this.staticOAuthClientInfo = options.staticOAuthClientInfo
     this.authorizeResource = options.authorizeResource
+    this.authorizeScopes = options.authorizeScopes
+    this.useAudience = options.useAudience || false
     this._state = randomUUID()
   }
 
@@ -171,7 +175,14 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    */
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
     if (this.authorizeResource) {
-      authorizationUrl.searchParams.set('resource', this.authorizeResource)
+      authorizationUrl.searchParams.set(
+        this.useAudience ? 'audience' : 'resource',
+        this.authorizeResource
+      )
+    }
+
+    if (this.authorizeScopes) {
+      authorizationUrl.searchParams.set('scope', this.authorizeScopes)
     }
 
     log(`\nPlease authorize this client by visiting:\n${authorizationUrl.toString()}\n`)

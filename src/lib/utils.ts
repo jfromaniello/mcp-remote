@@ -616,6 +616,13 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
     authorizeResource = args[resourceIndex + 1]
     log(`Using authorize resource: ${authorizeResource}`)
   }
+  // Parse scopes to authorize
+  let authorizeScopes = '' // Default
+  const scopesIndex = args.indexOf('--scopes')
+  if (scopesIndex !== -1 && scopesIndex < args.length - 1) {
+    authorizeScopes = args[scopesIndex + 1]
+    log(`Using authorize scopes: ${authorizeScopes}`)
+  }
 
   if (!serverUrl) {
     log(usage)
@@ -681,6 +688,11 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
     })
   }
 
+  const useAudience = args.indexOf('--use-audience') !== -1
+  if (useAudience) {
+    log('Using "audience" instead of "resource" for authorization')
+  }
+
   return {
     serverUrl,
     callbackPort,
@@ -691,6 +703,8 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
     staticOAuthClientMetadata,
     staticOAuthClientInfo,
     authorizeResource,
+    authorizeScopes,
+    useAudience,
   }
 }
 

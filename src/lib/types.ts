@@ -29,6 +29,10 @@ export interface OAuthProviderOptions {
   staticOAuthClientInfo?: StaticOAuthClientInformationFull
   /** Resource parameter to send to the authorization server */
   authorizeResource?: string
+  /** Scopes to send to the authorization server */
+  authorizeScopes?: string | undefined
+  /** Whether to use "audience" instead of "resource" for authorization */
+  useAudience?: boolean
 }
 
 /**

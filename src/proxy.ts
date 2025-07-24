@@ -36,6 +36,8 @@ async function runProxy(
   staticOAuthClientMetadata: StaticOAuthClientMetadata,
   staticOAuthClientInfo: StaticOAuthClientInformationFull,
   authorizeResource: string,
+  authorizeScopes: string,
+  useAudience: boolean = false,
 ) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
@@ -55,6 +57,8 @@ async function runProxy(
     staticOAuthClientMetadata,
     staticOAuthClientInfo,
     authorizeResource,
+    authorizeScopes,
+    useAudience,
   })
 
   // Create the STDIO transport for local connections
@@ -155,6 +159,8 @@ parseCommandLineArgs(process.argv.slice(2), 'Usage: npx tsx proxy.ts <https://se
       staticOAuthClientMetadata,
       staticOAuthClientInfo,
       authorizeResource,
+      authorizeScopes,
+      useAudience
     }) => {
       return runProxy(
         serverUrl,
@@ -165,6 +171,8 @@ parseCommandLineArgs(process.argv.slice(2), 'Usage: npx tsx proxy.ts <https://se
         staticOAuthClientMetadata,
         staticOAuthClientInfo,
         authorizeResource,
+        authorizeScopes,
+        useAudience
       )
     },
   )
